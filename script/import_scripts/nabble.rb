@@ -72,7 +72,6 @@ class ImportScripts::Nabble < ImportScripts::Base
                node_msg m
          WHERE n.node_id = m.node_id
            AND n.parent_id is not null
-           AND n.node_id < 20
       ORDER BY id
          LIMIT #{BATCH_SIZE}
         OFFSET #{offset};
@@ -81,6 +80,7 @@ class ImportScripts::Nabble < ImportScripts::Base
       break if results.ntuples < 1
 
       create_posts(results, total: total_count, offset: offset) do |m|
+        skip = false
         mapped = {}
 
         mapped[:id] = m['id']
@@ -89,12 +89,20 @@ class ImportScripts::Nabble < ImportScripts::Base
         mapped[:created_at] = m['post_time']
 
         if m['topic_id'] == root_node_id
+          puts '', "#{m['title']} is a topic!"
           mapped[:title] = CGI.unescapeHTML(m['title'])
         else
-          mapped[:topic_id] = m[:topic_id]
+          parent = topic_lookup_from_imported_post_id(m['topic_id'])
+          if parent
+            mapped[:topic_id] = parent[:topic_id]
+          else
+            puts "Parent post #{m['first_post_id']} doesn't exist. Skipping #{m["id"]}: #{m["title"][0..40]}"
+            skip = true
+          end
         end
 
-        mapped
+        skip ? nil : mapped
+
       end
     end
   end
@@ -105,17 +113,12 @@ class ImportScripts::Nabble < ImportScripts::Base
     match = s.match(/boundary="?([^\r|"]*)/i)
     if match
       boundary = match.captures[0]
- 
-      puts '', "match #{boundary}"
       index = s.index(/^--#{boundary}/)
-
-      puts "index #{index}"
-      puts "s.length #{s.length}"
-      s = s[index..s.length]
+      if index && index > 0
+        s = s[index..s.length]
+      end
       s.gsub!(/^--#{boundary}/, '')
       s.gsub!(/^Content-(.*):(.*)/, '')
-
-      puts '', "raw #{s}"
     end
     s = CGI.unescapeHTML(s)
     s
