@@ -89,14 +89,13 @@ class ImportScripts::Nabble < ImportScripts::Base
         mapped[:created_at] = m['post_time']
 
         if m['topic_id'] == root_node_id
-          puts '', "#{m['title']} is a topic!"
           mapped[:title] = CGI.unescapeHTML(m['title'])
         else
           parent = topic_lookup_from_imported_post_id(m['topic_id'])
           if parent
             mapped[:topic_id] = parent[:topic_id]
           else
-            puts "Parent post #{m['first_post_id']} doesn't exist. Skipping #{m["id"]}: #{m["title"][0..40]}"
+            puts "Parent post #{m['topic_id']} doesn't exist. Skipping #{m["id"]}: #{m["title"][0..40]}"
             skip = true
           end
         end
@@ -106,20 +105,32 @@ class ImportScripts::Nabble < ImportScripts::Base
       end
     end
   end
-  
+
   def process_nabble_post(raw)
     s = raw.dup
-
-    match = s.match(/boundary="?([^\r|"]*)/i)
-    if match
-      boundary = match.captures[0]
-      index = s.index(/^--#{boundary}/)
-      if index && index > 0
-        s = s[index..s.length]
+    # Strange encoding characters
+    s.gsub!(/=20/, '')
+    # Removes truncated lines
+    s.gsub!(/=[\n\r]/, '')
+    boundaries_found = s.match(/boundary="?([^\n|\r|"]*)/i)
+    if boundaries_found
+      boundary = boundaries_found.captures[0]
+      # The first block surrounded boundary tags is in plain/text
+      boundary_regexp = /#{Regexp.escape('--' + boundary)}[\n\r]+(.*)#{Regexp.escape('--' + boundary)}[\n\r]+/im
+      email_text_plain_found = s.match(boundary_regexp)
+      if email_text_plain_found
+        s = email_text_plain_found.captures[0]
       end
-      s.gsub!(/^--#{boundary}/, '')
-      s.gsub!(/^Content-(.*):(.*)/, '')
+      s.gsub!(/^Content-.*:.*[\n\r]?.*\n/i, '')
     end
+    # Removes Nabble mailing list email
+    s.gsub!(/(^On .*,.*)(<.*@.*nabble\.com>) (wrote:)/mi, "\\1\\3")
+    s.gsub!(/(On .*,.*)(<\[hidden email\].*>) (wrote:)/mi, "\\1\\3")
+    # Keeps quoted text on one line
+    s.gsub!(/(^>.*)=[\n\r]+(.*)/i, '\1\2')
+    # Removes Nabble email footer to reply
+    s.gsub!(/^>+ ------------------------------.*naml>[\n\r]+([\n\r]+>[\n\r]+)?/m, '')
+    s.gsub!(/^>+ If you reply to this email,.*NAML.*(<http:\/\/discuss\.asciidoctor\.org\/.*>)?/m, '')
     s = CGI.unescapeHTML(s)
     s
   end
