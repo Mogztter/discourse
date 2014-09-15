@@ -129,8 +129,8 @@ class ImportScripts::Nabble < ImportScripts::Base
     # Keeps quoted text on one line
     s.gsub!(/(^>.*)=[\n\r]+(.*)/i, '\1\2')
     # Removes Nabble email footer to reply
-    s.gsub!(/^>+ ------------------------------.*naml>[\n\r]+([\n\r]+>[\n\r]+)?/m, '')
-    s.gsub!(/^>+ If you reply to this email,.*NAML.*(<http:\/\/discuss\.asciidoctor\.org\/.*>)?/m, '')
+    s.gsub!(/^>+\s+------------------------------.*naml>[\n\r]+([\n\r]+>[\n\r]+)?/m, '')
+    s.gsub!(/^>+\s+If you reply to this email,.*NAML.*(<http:\/\/discuss\.asciidoctor\.org\/.*>)?/m, '')
     s = CGI.unescapeHTML(s)
     s
   end
